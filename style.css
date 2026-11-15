@@ -1,3 +1,8 @@
+@font-face {
+  font-family: "Pretendard";
+  src: url("assets/fonts/Pretendard-Light.woff2") format("woff2");
+  font-weight: 300; font-style: normal; font-display: swap;
+}
 /* 색·간격 기준: Chess.com 다크 테마 톤 (따뜻한 차콜 + 초록 강조 1곳) */
 :root {
   --bg: #2b2926; --surface: #3a3734; --surface2: #4a4744; --line: #45423e;
@@ -11,7 +16,7 @@
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
-  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif; }
+  font: 300 16px/1.4 "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif; }
 button { font: inherit; color: inherit; background: var(--surface); border: 0; border-radius: var(--r2); padding: 10px 14px; cursor: pointer; min-height: 48px; }
 button:active { filter: brightness(1.12); }
 button:disabled { opacity: .4; cursor: default; }
@@ -35,7 +40,9 @@ main { flex: 1; padding: 0 16px; }
 @keyframes pop { 0% { transform: scale(.9) } 60% { transform: scale(1.06) } 100% { transform: scale(1) } }
 .bubble { position: relative; flex: 1; background: var(--bubble); color: var(--bubble-fg); border-radius: 16px; padding: 10px 14px;
   min-height: 48px; display: flex; align-items: center; font-size: 15px; font-weight: 500; }
-.bubble::before { content: ""; position: absolute; left: -7px; top: 50%; margin-top: -7px; border: 7px solid transparent; border-left: 0; border-right-color: var(--bubble); }
+/* 꼬리: 몸통 안쪽까지 겹쳐 그려서 이음새 선이 안 생기게 */
+.bubble::before { content: ""; position: absolute; left: -5px; top: 50%; width: 14px; height: 14px; margin-top: -7px; background: var(--bubble); transform: rotate(45deg); border-radius: 2px; z-index: 0; }
+.bubble > * { position: relative; z-index: 1; }
 
 /* ---- 도장 ---- */
 .prog { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--fg2); margin: 4px 0 12px; }
@@ -47,7 +54,7 @@ main { flex: 1; padding: 0 16px; }
 .tile .ic { color: var(--fg2); }
 .tile.done { opacity: .55; }
 .tile em { position: absolute; top: 6px; right: 6px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--warn); color: #fff;
-  font: 800 12px/20px sans-serif; font-style: normal; }
+  font: 800 12px/20px "Pretendard", sans-serif; font-style: normal; }
 .tile em.ok { background: var(--accent); padding: 0; display: grid; place-items: center; width: 20px; }
 .ladder { display: grid; gap: 8px; }
 .tier { display: flex; align-items: center; gap: 12px; padding: 8px 14px 8px 8px; width: 100%; text-align: left; }
@@ -113,7 +120,7 @@ main { flex: 1; padding: 0 16px; }
 .pc { position: absolute; inset: 0; background-size: 100%; z-index: 3; }
 .pc.drag { position: fixed; z-index: 50; pointer-events: none; transform: scale(1.12); }
 .badge { position: absolute; right: -6%; top: -6%; width: 42%; height: 42%; border-radius: 50%; display: grid; place-items: center;
-  font: 800 12px/1 sans-serif; color: #fff; z-index: 6; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); animation: pop .3s ease; }
+  font: 800 12px/1 "Pretendard", sans-serif; color: #fff; z-index: 6; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); animation: pop .3s ease; }
 .badge.blunder { background: var(--bad); } .badge.mistake { background: var(--warn); } .badge.inaccuracy { background: var(--inacc); color: #262421; }
 .badge.good { background: var(--good); } .badge.best { background: var(--best); } .badge.habit { background: var(--trap); }
 .promo { position: absolute; inset: 0; display: none; background: rgba(0, 0, 0, .4); z-index: 20; }
@@ -155,7 +162,7 @@ main { flex: 1; padding: 0 16px; }
 .row.static { cursor: default; }
 .row img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .row .san { font-size: 17px; }
-.kind { min-width: 30px; height: 30px; padding: 0 6px; border-radius: 15px; display: grid; place-items: center; font: 800 13px/1 sans-serif; color: #fff; background: var(--warn); }
+.kind { min-width: 30px; height: 30px; padding: 0 6px; border-radius: 15px; display: grid; place-items: center; font: 800 13px/1 "Pretendard", sans-serif; color: #fff; background: var(--warn); }
 .kind.blunder { background: var(--bad); }
 .res { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; color: #fff; }
 .res.win { background: var(--good); } .res.loss { background: var(--bad); } .res.draw { background: var(--surface2); }
