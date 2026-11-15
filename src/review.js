@@ -130,3 +130,5 @@ export function hangingAfter(fen, uci) {
 }
 
 export const PIECE_KO = { p: "폰", n: "나이트", b: "비숍", r: "룩", q: "퀸", k: "킹" };
+// 받침에 따라 이/가
+export const iGa = (w) => { const c = w.charCodeAt(w.length - 1) - 0xac00; return w + (c >= 0 && c % 28 ? "이" : "가"); };

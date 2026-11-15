@@ -4,10 +4,13 @@ import { Engine } from "./engine.js";
 import { Board } from "./board.js";
 import { TIERS, tierOf, botMove } from "./bots.js";
 import { CARDS, GROUPS, cardMoves, whyFor } from "./cards.js";
-import { evalPos, judgeMove, analyseGame, topThree, serious, hangingAfter, SOLVE, PIECE_KO } from "./review.js";
+import { evalPos, judgeMove, analyseGame, topThree, serious, hangingAfter, SOLVE, PIECE_KO, iGa } from "./review.js";
 import { faceSrc, onFaceError, line } from "./coach.js";
 import * as store from "./store.js";
 import { Maia } from "./maia.js";
+import { icon } from "./icons.js";
+import { PIECE } from "./pieces.js";
+const kingImg = (c, size = 22) => `<img class="kimg" src="${PIECE[c + "k"]}" width="${size}" height="${size}" alt="">`;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -91,7 +94,7 @@ function show(v) {
   ({ home: renderHome, setup: renderSetup, cards: renderCards, notes: renderNotes, log: renderLog }[v] || (() => {}))();
   window.scrollTo(0, 0);
 }
-document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => show(b.dataset.v)));
+document.querySelectorAll("#tabs button").forEach((b) => { b.insertAdjacentHTML("afterbegin", icon(b.dataset.i, 22)); b.onclick = () => show(b.dataset.v); });
 
 /* =========================================================
    도장 (홈)
@@ -104,36 +107,54 @@ function dueCards() {
   return [...due, ...unseen].slice(0, 3);
 }
 
+const TIPS = [
+  "두기 전에 세 가지만 확인해. 상대가 노리는 것, 내 계획, 이 수 다음 상대의 응수.",
+  "퀸은 나이트와 비숍 다음에 꺼내고, 캐슬링은 일찍 해.",
+  "진 판은 되감기로 끝까지 다시 둬 보자.",
+  "2연패하면 판보다 카드와 오답을 먼저 풀자.",
+];
 function renderHome() {
   const d = store.daily();
   const nDue = dueNotes().length;
+  const nCards = dueCards().length;
   const last = S().games.filter((g) => g.points).slice(-1)[0];
+  const canRewind = last && !last.rewound && serious(last.points).length;
   const items = [
-    { done: d.notes > 0 || nDue === 0, t: "오답 복습", s: nDue ? `복습할 장면 ${nDue}개` : "지금 복습할 건 없어", btn: nDue ? "풀기" : null, go: () => startNotes(dueNotes()) },
-    { done: d.cards >= 1, t: "오프닝 카드", s: `오늘 ${Math.min(d.cards, 3)}/3장`, btn: "카드", go: () => startCardQueue(dueCards()) },
-    { done: d.game >= 1, t: "대국 한 판", s: "느리게, 두기 전에 세 가지 질문", btn: "대국", go: () => show("setup") },
-    { done: d.rewind >= 1, t: "되감기 완주", s: last && !last.rewound ? "아직 안 되감은 판이 있어" : "대국이 끝나면 바로 이어져", btn: last && !last.rewound && serious(last.points).length ? "되감기" : null, go: () => startRewind(last) },
+    { k: "notes", t: "오답", done: d.notes > 0 || nDue === 0, n: nDue, go: () => startNotes(dueNotes()) },
+    { k: "cards", t: "카드", done: d.cards >= 3 || !nCards, n: Math.max(0, Math.min(3, nCards) - d.cards), go: () => startCardQueue(dueCards()) },
+    { k: "play", t: "대국", done: d.game >= 1, n: 0, go: () => show("setup") },
+    { k: "rewind", t: "되감기", done: d.rewind >= 1, n: canRewind ? 1 : 0, go: () => (canRewind ? startRewind(last) : show("setup")) },
   ];
-  $("today").innerHTML = items.map((x, i) => `<li class="${x.done ? "done" : ""}"><span class="ck">${x.done ? "✓" : ""}</span><span class="t">${x.t}<small>${esc(x.s)}</small></span>${x.btn ? `<button data-i="${i}">${x.btn}</button>` : ""}</li>`).join("");
-  $("today").querySelectorAll("button").forEach((b) => (b.onclick = () => items[+b.dataset.i].go()));
+  const done = items.filter((x) => x.done).length;
+  $("today").innerHTML = `<div class="prog"><b>오늘</b><span class="pbar"><i style="width:${(done / 4) * 100}%"></i></span><span>${done}/4</span></div>
+    <div class="tiles">${items.map((x, i) => `<button class="tile ${x.done ? "done" : ""}" data-i="${i}">${icon(x.k === "rewind" ? "rewind" : x.k, 24)}<span>${x.t}</span>${x.done ? `<em class="ok">${icon("check", 14)}</em>` : x.n ? `<em>${x.n}</em>` : ""}</button>`).join("")}</div>`;
+  $("today").querySelectorAll(".tile").forEach((b) => (b.onclick = () => items[+b.dataset.i].go()));
+  const next = items.find((x) => !x.done) || items[2];
+  $("nextBtn").innerHTML = `${icon(next.k === "rewind" ? "rewind" : next.k, 22)} ${next.t}${next.n ? ` ${next.n}` : ""}`;
+  $("nextBtn").onclick = next.go;
   $("ladder").innerHTML = TIERS.map(tierRow).join("");
-  $("ladder").querySelectorAll(".tier:not(.locked)").forEach((b) => (b.onclick = () => { S().settings.tier = +b.dataset.t; store.save(); show("setup"); }));
+  bindTiers($("ladder"), (id) => { S().settings.tier = id; store.save(); show("setup"); });
 
   const lose = store.streakLosses();
   coachTier = maxTier();
   if (lose >= 2) sayKey("tilt", "frust", { n: lose });
-  else if (nDue) say(`오답 ${nDue}개 기다리고 있어. 그것부터 풀고 두자.`, "think");
-  else say(line("hello", coachTier), "smile");
+  else if (nDue) say(`오답 ${nDue}개가 남아 있어. 먼저 풀어 보자.`, "think");
+  else say(Math.random() < 0.5 ? TIPS[Math.floor(Math.random() * TIPS.length)] : line("hello", coachTier), "smile");
 }
 
 function tierRow(t) {
   const locked = !S().unlocked.includes(t.id);
   const res = store.lastResults(t.id);
   const dots = Array.from({ length: 5 }, (_, i) => `<i class="${res[i] || ""}"></i>`).join("");
-  const sub = locked ? "앞 구간에서 최근 5판 중 3승" : t.stage === "baby" ? "애기 에이든" : "에이든";
   return `<button class="tier ${locked ? "locked" : ""} ${S().settings.tier === t.id ? "sel" : ""}" data-t="${t.id}">
     <img src="${faceSrc(t.stage, "smile")}" onerror="this.onerror=null;this.src='img/aiden/smile.webp'" alt="">
-    <span class="t"><b>${t.id}</b><small>${sub}</small></span>${locked ? "🔒" : `<span class="dots">${dots}</span>`}</button>`;
+    <b>${t.id}</b>${locked ? `<span class="lk">${icon("lock", 18)}</span>` : `<span class="dots">${dots}</span>`}</button>`;
+}
+function bindTiers(root, pick) {
+  root.querySelectorAll(".tier").forEach((b) => (b.onclick = () => {
+    if (b.classList.contains("locked")) { say("앞 구간에서 최근 5판 중 3승이면 열려.", "playful"); return; }
+    pick(+b.dataset.t);
+  }));
 }
 
 /* =========================================================
@@ -143,17 +164,20 @@ function renderSetup() {
   const st = S().settings;
   if (!st.tier || !S().unlocked.includes(st.tier)) st.tier = maxTier();
   $("setupTiers").innerHTML = TIERS.map(tierRow).join("");
-  $("setupTiers").querySelectorAll(".tier:not(.locked)").forEach((b) => (b.onclick = () => { st.tier = +b.dataset.t; store.save(); renderSetup(); }));
-  const seg = (id, key) => $(id).querySelectorAll("button").forEach((b) => {
-    b.classList.toggle("on", st[key] === b.dataset.v);
-    b.onclick = () => { st[key] = b.dataset.v; store.save(); renderSetup(); };
-  });
-  seg("segColor", "color"); seg("segClock", "clock");
+  bindTiers($("setupTiers"), (id) => { st.tier = id; store.save(); renderSetup(); });
+  const seg = (id, key, opts) => {
+    $(id).innerHTML = opts.map(([v, h]) => `<button data-v="${v}" class="${st[key] === v ? "on" : ""}">${h}</button>`).join("");
+    $(id).querySelectorAll("button").forEach((b) => (b.onclick = () => { st[key] = b.dataset.v; store.save(); renderSetup(); }));
+  };
+  seg("segColor", "color", [["w", `${kingImg("w")} 백`], ["b", `${kingImg("b")} 흑`], ["r", icon("dice", 20)]]);
+  seg("segClock", "clock", [["none", icon("infinity", 22)], ["10+5", "10+5"], ["15+10", "15+10"]]);
+  $("checkLbl").innerHTML = `${icon("shield", 20)} 점검`;
+  $("checkInfo").innerHTML = icon("info", 20);
+  $("checkInfo").onclick = () => say("점검을 켜면 기물이 공짜로 잡히거나 바로 메이트당하는 수를 두기 전에 한 번 확인해.", "think");
   $("optCheck").checked = !!st.check;
   $("optCheck").onchange = (e) => { st.check = e.target.checked; store.save(); };
-  renderMaiaState();
   coachTier = st.tier;
-  say(st.tier >= 1000 ? "1000부터는 나도 진지하게 둔다." : "애기라고 봐주면 안 돼!", "playful");
+  say("상대와 시간을 고르고 시작해.", "smile");
 }
 $("startGame").onclick = () => {
   const st = S().settings;
@@ -199,7 +223,7 @@ function actions(list) {
   el.innerHTML = "";
   for (const a of list) {
     const b = document.createElement("button");
-    b.textContent = a.label;
+    b.innerHTML = `${a.icon ? icon(a.icon, 22) : ""}<span>${a.label}</span>`;
     if (a.on) b.classList.add("on");
     if (a.disabled) b.disabled = true;
     b.onclick = a.fn;
@@ -248,8 +272,8 @@ function startGame({ tier, me, clock, check }) {
 }
 function gameActions() {
   actions([
-    { label: P.check ? "점검 켬" : "점검 끔", on: P.check, fn: () => { P.check = !P.check; gameActions(); } },
-    { label: "기권", fn: () => { if (!P.over && confirm("기권할까?")) endGame("loss", "resign"); } },
+    { icon: "shield", label: "점검", on: P.check, fn: () => { P.check = !P.check; gameActions(); say(P.check ? "점검 켰어." : "점검 껐어.", "smile"); } },
+    { icon: "flag", label: "기권", fn: () => { if (!P.over && confirm("기권할까?")) endGame("loss", "resign"); } },
   ]);
 }
 
@@ -285,10 +309,10 @@ function userGameMove(uci) {
     const h = hangingAfter(P.game.fen(), uci);
     if (h) {
       board.warn = h.square; board.draw();
-      say(h.mate ? line("mateHang", P.tier) : line("hang", P.tier, { p: PIECE_KO[h.piece] }), "surprise");
-      overlay(`<h3>정말 둘 거야?</h3><p>${h.mate ? "한 수 메이트를 허용해." : `${PIECE_KO[h.piece]}가 걸려.`}</p>`, [
-        { label: "다시 생각할래", primary: true, fn: () => { hideOverlay(); board.warn = null; board.draw(); say("좋아. 상대가 뭘 노리는지 다시 봐.", "smile"); } },
-        { label: "그래도 둔다", fn: () => { hideOverlay(); board.warn = null; P.confirmed = true; userGameMove(uci); } },
+      say(h.mate ? line("mateHang", P.tier) : line("hang", P.tier, { p: iGa(PIECE_KO[h.piece]) }), "surprise");
+      overlay(`<h3>이 수를 둘까?</h3><p>${h.mate ? "바로 메이트당해." : `${iGa(PIECE_KO[h.piece])} 잡혀.`}</p>`, [
+        { label: "다시 생각하기", primary: true, fn: () => { hideOverlay(); board.warn = null; board.draw(); say("상대가 뭘 노리는지 한 번 더 봐.", "smile"); } },
+        { label: "그대로 두기", fn: () => { hideOverlay(); board.warn = null; P.confirmed = true; userGameMove(uci); } },
       ]);
       return;
     }
@@ -323,7 +347,6 @@ async function botTurn() {
   board.draw();
   if (m.captured) say(line("botCapture", P.tier), "playful");
   else if (m.san.includes("+")) say(line("check", P.tier), "joy");
-  else if (Math.random() < 0.18) say(["음…", "어디 보자.", "흐음."][Math.floor(Math.random() * 3)], "think");
   checkOver();
 }
 
@@ -357,10 +380,10 @@ function endGame(result, why) {
   store.bump("game");
   sound(null);
   say(line(result, P.tier), result === "win" ? "frust" : result === "loss" ? "joy" : "smile");
-  const title = { win: "이겼다!", loss: "졌어", draw: "무승부" }[result];
+  const title = { win: "승리", loss: "패배", draw: "무승부" }[result];
   const sub = { mate: "체크메이트", resign: "기권", time: "시간 초과", stalemate: "스테일메이트", draw: "무승부" }[why];
-  const unl = unlocked ? `<p>🔓 ${unlocked} 구간이 열렸어!</p>` : "";
-  overlay(`<h3>${title}</h3><p>${sub}</p>${unl}<div class="progress"><i id="anaBar"></i></div><p id="anaTxt">판을 다시 보는 중…</p>`, []);
+  const unl = unlocked ? `<p>${icon("lock", 16)} ${unlocked} 구간 열림</p>` : "";
+  overlay(`<h3>${title}</h3><p>${sub}</p>${unl}<div class="progress"><i id="anaBar"></i></div>`, []);
   actions([]);
   runAnalysis(g);
 }
@@ -387,7 +410,7 @@ async function runAnalysis(g) {
   if (!alive(t)) return;
   const top = topThree(pts);
   const nInacc = pts.length - serious(pts).length;
-  const list = top.length ? `<p>실수 ${serious(pts).length}개${nInacc ? ` · 부정확 ${nInacc}개` : ""}. 제일 컸던 것:<br>${top.map((p) => `${Math.floor(p.ply / 2) + 1}수 ${esc(p.played)} · ${p.tags.join(", ")}`).join("<br>")}</p>` : "<p>큰 실수 없이 뒀어. 대단한데?</p>";
+  const list = top.length ? `<p class="mlist">${top.map((p) => `<span class="kind ${p.kind}">${p.kind === "blunder" ? "??" : "?"}</span> <b>${esc(p.played)}</b> ${esc(p.tags[0])}`).join("<br>")}</p>` : "<p>큰 실수 없이 뒀어.</p>";
   const btns = [];
   if (top.length) btns.push({ label: "되감기 시작", primary: true, fn: () => startRewind(g) });
   btns.push({ label: "한 판 더", primary: !top.length, fn: () => startGame({ tier: g.tier, me: g.me, clock: S().settings.clock, check: S().settings.check }) });
@@ -426,12 +449,12 @@ async function setPuzzle(target) {
   rewindActions();
 }
 function rewindStatus() {
-  status(P.phase === "find" ? `다시 찾기 · 고친 수 ${P.fixed}개` : `이어서 두는 중 · 고친 수 ${P.fixed}개`);
+  status(`<span class="chip">${icon(P.phase === "find" ? "target" : "rewind", 14)} ${P.fixed}</span>`);
 }
 function rewindActions() {
   actions([
-    { label: "힌트", disabled: P.phase !== "find", fn: () => { P.tries = Math.max(P.tries, 2); giveHint(); } },
-    { label: "그만", fn: () => show("home") },
+    { icon: "bulb", label: "힌트", disabled: P.phase !== "find", fn: () => { P.tries = Math.max(P.tries, 2); giveHint(); } },
+    { icon: "close", label: "그만", fn: () => show("home") },
   ]);
 }
 function giveHint() {
@@ -534,13 +557,13 @@ function rewindOver() {
   if (!lost) {
     P.src.rewound = true; store.save(); store.bump("rewind");
     sayKey("complete", "joy");
-    overlay(`<h3>완주!</h3><p>${g.isCheckmate() ? "체크메이트로 끝냈어." : "비김으로 지켜 냈어."} 고친 수 ${P.fixed}개.</p>`, [
+    overlay(`<h3>완주</h3><p>${g.isCheckmate() ? "체크메이트로 끝냈어." : "비김으로 지켜 냈어."} 고친 수 ${P.fixed}개.</p>`, [
       { label: "도장으로", primary: true, fn: () => show("home") },
       { label: "오답 복습", fn: () => startNotes(dueNotes()) },
     ]);
   } else {
-    say("이번엔 버티지 못했어. 마지막으로 고친 곳부터 다시 해 보자.", "think");
-    overlay(`<h3>아깝다</h3><p>조금씩 밀리다가 졌어.</p>`, [
+    say("이번엔 졌어. 마지막으로 고친 곳부터 다시 해 보자.", "think");
+    overlay(`<h3>패배</h3>`, [
       { label: "마지막 지점부터", primary: true, fn: () => retryFromCheckpoint() },
       { label: "도장으로", fn: () => show("home") },
     ]);
@@ -581,9 +604,9 @@ async function nextNote() {
   P.game = g;
   board.draw();
   const left = noteQueue.length;
-  status(`${n.tags.map((x) => `<span class="tag">${esc(x)}</span>`).join(" ")} ${n.habit ? '<span class="tag habit">손버릇</span>' : ""} · 남은 장면 ${left}`);
-  say(n.habit ? "손버릇 장면이야. 손이 먼저 나가지 않게!" : "이 장면에서 실수했었어. 더 좋은 수를 찾아봐.", "think");
-  actions([{ label: "힌트", fn: () => { P.tries = Math.max(P.tries, 2); noteHint(); } }, { label: "건너뛰기", fn: () => nextNote() }]);
+  status(`<span class="chip">${esc(n.tags[0] || "")}</span>${n.habit ? '<span class="chip habit">손버릇</span>' : ""}${left ? `<span class="chip">+${left}</span>` : ""}`);
+  say(n.habit ? "전에 같은 수를 반복했던 장면이야." : "이 장면에서 실수했었어. 더 나은 수를 찾아봐.", "think");
+  actions([{ icon: "bulb", label: "힌트", fn: () => { P.tries = Math.max(P.tries, 2); noteHint(); } }, { icon: "skip", label: "넘기기", fn: () => nextNote() }, { icon: "close", label: "그만", fn: () => show("notes") }]);
   const t = P.token;
   P.busy = true;
   P.before = await evalPos(analyse, n.fen, P.me);
@@ -592,7 +615,7 @@ async function nextNote() {
 function noteHint() {
   const b = P.before && P.before.best; if (!b) return;
   board.hint = P.tries >= 3 ? [b.slice(0, 2), b.slice(2, 4)] : [b.slice(0, 2)];
-  say(P.tries >= 3 ? "정답은 이 칸으로! 직접 둬 봐." : "표시한 기물을 봐.", "smile");
+  say(P.tries >= 3 ? "정답은 표시한 칸이야. 직접 둬 봐." : "표시한 기물을 움직여 봐.", "smile");
   board.draw();
 }
 async function userNoteMove(uci) {
@@ -610,7 +633,7 @@ async function userNoteMove(uci) {
     store.schedule(n, clean);
     if (clean) n.solved = (n.solved || 0) + 1;
     store.save(); store.bump("notes");
-    say(clean ? "한 번에 찾았다! 다음 장면." : "찾았어. 이 장면은 금방 또 나올 거야.", "joy");
+    say(clean ? "한 번에 찾았어." : "찾았어. 이 장면은 곧 다시 나올 거야.", "joy");
     await sleep(1100);
     if (alive(t)) nextNote();
     return;
@@ -641,9 +664,9 @@ function nextCard() {
 }
 function startCard(card) {
   openPlay({ mode: "card", tier: maxTier(), me: card.me, card, step: 0, wrong: 0, stepWrong: 0, oppName: card.title });
-  status(`${esc(card.goal)}${card.trap ? ' <span class="tag trap">함정</span>' : ""}`);
-  say(line("card", P.tier) + " " + card.title, "smile");
-  actions([{ label: "처음부터", fn: () => startCard(card) }, { label: "그만", fn: () => show("cards") }]);
+  status(card.trap ? `<span class="chip trap">${icon("bolt", 14)} 함정</span>` : "");
+  say(card.goal, "smile");
+  actions([{ icon: "restart", label: "처음", fn: () => startCard(card) }, { icon: "close", label: "그만", fn: () => show("cards") }]);
   cardAdvance();
 }
 async function cardAdvance() {
@@ -698,25 +721,29 @@ function cardDone() {
   store.schedule(st, P.wrong === 0);
   store.save(); store.bump("cards");
   P.over = true;
-  say(`${line("cardDone", P.tier)} ${P.card.goal}`, "joy");
+  say(line("cardDone", P.tier), "joy");
   const more = cardQueue.length;
-  overlay(`<h3>${esc(P.card.title)}</h3><p>${P.wrong ? `틀린 수 ${P.wrong}개. 금방 또 나와.` : "한 번도 안 틀렸어!"}</p>`, [
+  overlay(`<h3>${esc(P.card.title)}</h3><p>${P.wrong ? `틀린 수 ${P.wrong}` : "다 맞혔어."}</p>`, [
     more ? { label: `다음 카드 (${more})`, primary: true, fn: () => nextCard() } : { label: "카드 목록", primary: true, fn: () => show("cards") },
     { label: "한 번 더", fn: () => startCard(P.card) },
   ]);
 }
 
+const GROUP_SHORT = { w: "백 · 이탈리안", be4: "흑 · 1.e4", bd4: "흑 · 1.d4" };
 function renderCards() {
   coachTier = maxTier();
-  say("수순 외우기보다 왜 그 수인지! 틀리면 이유를 알려 줄게.", "smile");
-  $("dueCards").textContent = `오늘의 카드 (${dueCards().length})`;
+  say("틀리면 그 수를 두는 이유를 알려 줄게.", "smile");
+  const due = dueCards().length;
+  $("dueCards").innerHTML = `${icon("cards", 22)} 오늘의 카드${due ? ` ${due}` : ""}`;
+  $("dueCards").disabled = !due;
   $("dueCards").onclick = () => startCardQueue(dueCards());
-  $("cardGroups").innerHTML = GROUPS.map((gr) => `<div class="group"><h2>${gr.title}</h2><div class="cardgrid">${CARDS.filter((c) => c.group === gr.id).map((c) => {
+  $("cardGroups").innerHTML = GROUPS.map((gr) => `<h2>${GROUP_SHORT[gr.id] || gr.title}</h2><div class="cardgrid">${CARDS.filter((c) => c.group === gr.id).map((c) => {
     const st = store.cardState(c.id);
     const due = st.seen && store.isDue(st);
     const lv = Array.from({ length: 5 }, (_, i) => `<i class="${i < st.box ? "on" : ""}"></i>`).join("");
-    return `<button class="ocard" data-id="${c.id}"><b>${esc(c.title)}</b><small>${esc(c.goal)}</small><span class="meta"><span class="lv">${lv}</span><span>${c.trap ? '<span class="tag trap">함정</span> ' : ""}${due ? '<span class="tag due">복습</span>' : !st.seen ? '<span class="tag">새 카드</span>' : ""}</span></span></button>`;
-  }).join("")}</div></div>`).join("");
+    const mark = due ? '<span class="mark due"></span>' : c.trap ? `<span class="mark trap">${icon("bolt", 14)}</span>` : "";
+    return `<button class="ocard" data-id="${c.id}">${mark}<b>${esc(c.title)}</b><span class="lv">${lv}</span></button>`;
+  }).join("")}</div>`).join("");
   $("cardGroups").querySelectorAll(".ocard").forEach((b) => (b.onclick = () => { cardQueue = []; startCard(CARDS.find((c) => c.id === b.dataset.id)); }));
 }
 
@@ -729,17 +756,17 @@ function renderNotes() {
   const all = S().notes;
   const tags = ["전체", "복습", "손버릇", ...new Set(all.flatMap((n) => n.tags))];
   if (!tags.includes(noteFilter)) noteFilter = "전체";
-  $("noteFilters").innerHTML = tags.map((x) => `<button class="${x === noteFilter ? "on" : ""}">${esc(x)}</button>`).join("");
+  $("noteFilters").innerHTML = all.length ? tags.map((x) => `<button class="${x === noteFilter ? "on" : ""}">${esc(x)}</button>`).join("") : "";
   $("noteFilters").querySelectorAll("button").forEach((b) => (b.onclick = () => { noteFilter = b.textContent; renderNotes(); }));
   const list = all.filter((n) => noteFilter === "전체" || (noteFilter === "복습" ? store.isDue(n) : noteFilter === "손버릇" ? n.habit : n.tags.includes(noteFilter))).slice().reverse();
   const due = dueNotes();
-  $("dueNotes").textContent = due.length ? `복습 시작 (${due.length})` : "복습할 장면 없음";
+  $("dueNotes").innerHTML = `${icon("notes", 22)} 복습${due.length ? ` ${due.length}` : ""}`;
   $("dueNotes").disabled = !due.length;
   $("dueNotes").onclick = () => startNotes(dueNotes());
-  $("noteList").innerHTML = list.length ? list.map((n) => `<div class="note"><span class="res ${n.kind === "blunder" ? "loss" : "draw"}">${n.kind === "blunder" ? "??" : "?"}</span><span class="t">${esc(n.played)} 대신 다른 수 <small>${n.tags.map(esc).join(" · ")} · ${n.tier}${n.habit ? " · 손버릇" : ""}</small></span><button data-id="${n.id}">풀기</button></div>`).join("")
-    : `<div class="empty">아직 오답이 없어. 한 판 두고 오면 여기 쌓여.</div>`;
-  $("noteList").querySelectorAll("button").forEach((b) => (b.onclick = () => startNotes([all.find((n) => n.id === b.dataset.id)])));
-  say(due.length ? `복습할 장면 ${due.length}개. 하루에 조금씩!` : "틀린 장면은 여기 모여. 시간이 지나면 다시 나와.", "think");
+  $("noteList").innerHTML = list.length ? list.map((n) => `<button class="row" data-id="${n.id}"><span class="kind ${n.kind}">${n.kind === "blunder" ? "??" : "?"}</span><b class="san">${esc(n.played)}</b><span class="chip">${esc(n.tags[0] || "")}</span>${n.habit ? '<span class="chip habit">손버릇</span>' : ""}<span class="sp"></span>${icon("chevron", 18)}</button>`).join("")
+    : `<div class="empty">${icon("check", 32)}<span>오답 없음</span></div>`;
+  $("noteList").querySelectorAll(".row").forEach((b) => (b.onclick = () => startNotes([all.find((n) => n.id === b.dataset.id)])));
+  say(due.length ? `복습할 장면이 ${due.length}개 있어.` : "틀린 장면은 여기 모이고, 때가 되면 다시 나와.", "think");
 }
 
 /* =========================================================
@@ -757,18 +784,23 @@ function renderLog() {
   const habits = S().notes.filter((n) => n.habit).length;
   if (habits) counts["손버릇"] = habits;
   const ent = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  if (inacc) ent.push(["부정확(기록만)", inacc]);
+  if (inacc) ent.push(["부정확", inacc]);
   const max = Math.max(1, ...ent.map((e) => e[1]));
-  $("tagBars").innerHTML = ent.length ? ent.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><span class="b"><i style="width:${(100 * v) / max}%"></i></span><span>${v}</span></div>`).join("") : `<div class="empty">판을 두면 실수 유형이 쌓여.</div>`;
+  const wins = S().games.filter((g) => g.result === "win").length;
+  const rew = S().games.filter((g) => g.rewound).length;
+  $("stats").innerHTML = [["판", S().games.length], ["승", wins], ["완주", rew]].map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join("");
+  $("tagBars").innerHTML = ent.length ? ent.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><span class="b"><i style="width:${(100 * v) / max}%"></i></span><b>${v}</b></div>`).join("") : "";
   $("gameList").innerHTML = games.length ? games.slice(0, 30).map((g) => {
-    const top = g.points ? topThree(g.points) : [];
     const r = { win: "승", loss: "패", draw: "무" }[g.result];
-    const d = new Date(g.date);
-    return `<div class="game"><span class="res ${g.result}">${r}</span><span class="t">에이든 ${g.tier} · ${g.me === "w" ? "백" : "흑"} · ${Math.ceil(g.sans.length / 2)}수<small>${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}${g.rewound ? " · 되감기 완주" : ""}</small>${top.length ? `<div class="mist">${top.map((p) => `${Math.floor(p.ply / 2) + 1}수 ${esc(p.played)} (${p.tags.join(", ")})`).join(" / ")}</div>` : ""}</span>${serious(g.points).length ? `<button data-id="${g.id}">되감기</button>` : ""}</div>`;
-  }).join("") : `<div class="empty">아직 둔 판이 없어.</div>`;
-  $("gameList").querySelectorAll("button").forEach((b) => (b.onclick = () => startRewind(S().games.find((g) => g.id === b.dataset.id))));
+    const n = serious(g.points).length;
+    const t = tierOf(g.tier);
+    return `<button class="row ${n ? "" : "static"}" data-id="${g.id}"><span class="res ${g.result}">${r}</span><img src="${faceSrc(t.stage, "smile")}" onerror="this.onerror=null;this.src='img/aiden/smile.webp'" alt=""><b>${g.tier}</b>${kingImg(g.me, 20)}${g.rewound ? `<span class="chip ok">${icon("check", 12)}</span>` : ""}<span class="sp"></span>${n ? `<span class="kind blunder">${n}</span>${icon("rewind", 18)}` : ""}</button>`;
+  }).join("") : `<div class="empty">${icon("log", 32)}<span>아직 둔 판 없음</span></div>`;
+  $("gameList").querySelectorAll(".row:not(.static)").forEach((b) => (b.onclick = () => startRewind(S().games.find((g) => g.id === b.dataset.id))));
+  $("exportBtn").innerHTML = `${icon("download", 16)} 백업`;
+  $("importLbl").innerHTML = `${icon("upload", 16)} 불러오기`;
   const top = ent[0];
-  say(top ? `제일 많은 건 "${top[0]}". 거기부터 잡자.` : "판을 두면 여기 기록이 쌓여.", "think");
+  say(top ? `가장 많은 실수는 "${top[0]}"이야.` : "판을 두면 여기에 기록이 쌓여.", "think");
 }
 $("exportBtn").onclick = () => {
   const blob = new Blob([JSON.stringify(S())], { type: "application/json" });
