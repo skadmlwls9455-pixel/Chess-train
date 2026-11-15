@@ -19,7 +19,14 @@ function eng() {
   if (!engine || engine.dead) engine = new Engine("vendor/stockfish-19-lite-single.js");
   return engine;
 }
-const analyse = (fen, depth, mpv) => eng().analyse(fen, depth, mpv);
+async function analyse(fen, depth, mpv) {
+  try { return await eng().analyse(fen, depth, mpv); }
+  catch (e) {
+    try { engine && engine.stop(); } catch (_) {}
+    engine = null;
+    return await eng().analyse(fen, depth, mpv);
+  }
+}
 
 /* ---------- 소리 ---------- */
 const SFX = {};
@@ -243,8 +250,7 @@ function tick(t) {
 }
 function pressClock(side) {
   const c = P.clock; if (!c) return;
-  if (c.t0) c[side] -= Date.now() - c.t0;
-  if (P.hist.length >= 2) c[side] += c.inc;
+  if (c.t0) { c[side] -= Date.now() - c.t0; c[side] += c.inc; }
   c.t0 = P.hist.length >= 1 ? Date.now() : 0; // 첫 수 전에는 시계가 안 간다
   renderClocks();
 }
@@ -278,12 +284,12 @@ async function botTurn() {
   const t = P.token;
   P.busy = true;
   const started = Date.now();
-  const r = await botMove(analyse, P.game.fen(), P.tier, { history: P.hist }).catch(() => null);
+  const r = (await botMove(analyse, P.game.fen(), P.tier, { history: P.hist }).catch(() => null)) || randomMove(P.game);
   if (!alive(t) || P.over) return;
   // 사람처럼 잠깐 생각하는 척 (낮은 구간은 빨리 둔다)
   const think = 350 + Math.random() * (P.tier >= 1000 ? 1400 : 900);
   await sleep(Math.max(0, think - (Date.now() - started)));
-  if (!alive(t) || P.over || !r) { if (P) P.busy = false; return; }
+  if (!alive(t) || P.over) return;
   const m = applyUci(r.uci);
   P.hist.push(m.san);
   pressClock(P.me === "w" ? "b" : "w");
@@ -294,6 +300,12 @@ async function botTurn() {
   else if (m.san.includes("+")) say(line("check", P.tier), "joy");
   else if (Math.random() < 0.18) say(["음…", "어디 보자.", "흐음."][Math.floor(Math.random() * 3)], "think");
   checkOver();
+}
+
+function randomMove(g) {
+  const ms = g.moves({ verbose: true });
+  const m = ms[Math.floor(Math.random() * ms.length)];
+  return { uci: m.from + m.to + (m.promotion || ""), san: m.san };
 }
 
 function checkOver() {
@@ -327,8 +339,16 @@ function endGame(result, why) {
 
 async function runAnalysis(g) {
   const t = P.token;
-  const pts = await analyseGame(analyse, g.sans, g.me, (x) => { const b = $("anaBar"); if (b && alive(t)) b.style.width = Math.round(x * 100) + "%"; }, () => !alive(t));
-  if (!pts) return;
+  let pts;
+  try {
+    pts = await analyseGame(analyse, g.sans, g.me, (x) => { const b = $("anaBar"); if (b && alive(t)) b.style.width = Math.round(x * 100) + "%"; });
+  } catch (e) {
+    if (alive(t)) overlay(`<h3>분석이 멈췄어</h3><p>엔진이 응답하지 않았어.</p>`, [
+      { label: "다시 분석", primary: true, fn: () => { overlay(`<h3>다시 보는 중</h3><div class="progress"><i id="anaBar"></i></div>`, []); runAnalysis(g); } },
+      { label: "도장으로", fn: () => show("home") },
+    ]);
+    return;
+  }
   g.points = pts;
   store.save();
   // 실수 장면은 모두 오답노트로
@@ -459,10 +479,10 @@ async function rewindBot() {
   const t = P.token;
   P.busy = true;
   board.badge = null;
-  const r = await botMove(analyse, P.game.fen(), P.tier, { history: P.hist }).catch(() => null);
+  const r = (await botMove(analyse, P.game.fen(), P.tier, { history: P.hist }).catch(() => null)) || randomMove(P.game);
   if (!alive(t)) return;
   await sleep(350);
-  if (!alive(t) || !r) return;
+  if (!alive(t)) return;
   const m = applyUci(r.uci);
   P.hist.push(m.san);
   sound(m);
@@ -480,7 +500,7 @@ async function rewindBot() {
 function rewindOver() {
   const g = P.game;
   if (!g.isGameOver()) return false;
-  P.over = true;
+  P.over = true; P.busy = false;
   const lost = g.isCheckmate() && g.turn() === P.me;
   if (!lost) {
     P.src.rewound = true; store.save(); store.bump("rewind");
@@ -732,6 +752,10 @@ $("importFile").onchange = async (e) => {
     location.reload();
   } catch (_) { alert("백업 파일을 읽을 수 없어."); }
 };
+
+window.addEventListener("beforeunload", (e) => {
+  if (P && P.mode === "game" && !P.over && P.hist.length) { e.preventDefault(); e.returnValue = ""; }
+});
 
 /* ---------- 시작 ---------- */
 show("home");
