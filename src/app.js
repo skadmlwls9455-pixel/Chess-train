@@ -823,6 +823,11 @@ window.addEventListener("beforeunload", (e) => {
   if (P && P.mode === "game" && !P.over && P.hist.length) { e.preventDefault(); e.returnValue = ""; }
 });
 
+/* ---------- 앱 설치(홈 화면) + 저장소 보존 요청 ---------- */
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+// 브라우저가 공간이 부족할 때 기록을 지우지 않도록 요청 (설치된 앱이면 대개 허용됨)
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
 /* ---------- 시작 ---------- */
 show("home");
 

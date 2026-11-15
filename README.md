@@ -27,7 +27,7 @@ python3 -m http.server 8000
 # http://localhost:8000
 ```
 
-Vercel / GitHub Pages / Netlify에 폴더째 올려도 돼. 기록은 그 기기 브라우저(localStorage)에만 저장되고, 일지 탭에서 백업 파일로 옮길 수 있어.
+Vercel / GitHub Pages / Netlify에 폴더째 올려도 돼. 휴대폰 크롬에서 열고 메뉴 → **앱 설치**(또는 홈 화면에 추가)를 누르면 주소창 없이 앱처럼 열려. 아이폰은 사파리 공유 → 홈 화면에 추가. 기록은 그 기기 브라우저(localStorage)에만 저장되고, 일지 탭에서 백업 파일로 옮길 수 있어.
 
 ## 애기 에이든 그림
 
