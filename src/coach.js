@@ -1,12 +1,12 @@
 // 에이든: 상대 겸 코치. 400~800은 애기 에이든, 1000부터 원래 에이든.
-// 애기 그림(img/baby/*.png)이 아직 없으면 원래 에이든 얼굴로 대신한다.
+// 애기 그림(img/baby/*.webp)이 없으면 원래 에이든 얼굴로 대신한다.
 import { tierOf } from "./bots.js";
 
 export const FACES = ["think", "surprise", "smile", "playful", "frust", "joy"];
 const babyMissing = new Set();
 
 export function faceSrc(stage, face) {
-  if (stage === "baby" && !babyMissing.has(face)) return `img/baby/${face}.png`;
+  if (stage === "baby" && !babyMissing.has(face)) return `img/baby/${face}.webp`;
   return `img/aiden/${face}.webp`;
 }
 export function onFaceError(img, stage, face) {

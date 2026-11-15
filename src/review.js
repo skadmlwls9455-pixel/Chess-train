@@ -3,9 +3,12 @@ import { Chess } from "../vendor/chess.js";
 import { scoreOf } from "./engine.js";
 
 export const REVIEW_DEPTH = 11;
-export const MISTAKE = 10;   // 승률 10%p 이상 떨어지면 실수
-export const BLUNDER = 20;   // 20%p 이상이면 블런더
-export const ACCEPT = 6;     // 최선 대비 6%p 안쪽이면 정답 인정
+// Lichess와 같은 기준 (lila Advice.scala): 승률이 떨어진 폭으로 판정
+export const INACCURACY = 10; // 10%p 이상: 부정확 (기록만)
+export const MISTAKE = 20;    // 20%p 이상: 실수 (되감기가 멈춤, 오답노트행)
+export const BLUNDER = 30;    // 30%p 이상: 블런더
+export const ACCEPT = 6;      // 최선 대비 6%p 안쪽이면 좋은 수
+export const SOLVE = INACCURACY; // 퍼즐 정답 인정: 최선 대비 10%p 미만
 
 const VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 
@@ -33,7 +36,7 @@ export async function judgeMove(analyse, before, fenAfter, me) {
   const drop = Math.max(0, before.win - after.win);
   // 이미 끝난 판(크게 이기거나 지는 중)에서는 덜 깐깐하게
   const decided = (before.win >= 97 && after.win >= 90) || before.win <= 4;
-  const kind = decided ? "ok" : drop >= BLUNDER ? "blunder" : drop >= MISTAKE ? "mistake" : drop <= ACCEPT ? "good" : "ok";
+  const kind = decided ? "ok" : drop >= BLUNDER ? "blunder" : drop >= MISTAKE ? "mistake" : drop >= INACCURACY ? "inaccuracy" : drop <= ACCEPT ? "good" : "ok";
   return { after, drop, kind };
 }
 
@@ -83,7 +86,7 @@ export async function analyseGame(analyse, sans, me, onProgress, isCancelled = (
     const m = g.move(sans[i]);
     const j = await judgeMove(analyse, before, g.fen(), me);
     prev = null;
-    if (j.kind === "mistake" || j.kind === "blunder") {
+    if (j.kind === "mistake" || j.kind === "blunder" || j.kind === "inaccuracy") {
       points.push({
         ply: i, fen: fenBefore, played: m.san, playedUci: m.from + m.to + (m.promotion || ""),
         best: before.best, kind: j.kind, drop: j.drop,
@@ -95,8 +98,11 @@ export async function analyseGame(analyse, sans, me, onProgress, isCancelled = (
   return points;
 }
 
+// 되감기·오답노트 대상: 실수와 블런더만 (부정확은 일지에 기록만)
+export const isSerious = (p) => p.kind === "mistake" || p.kind === "blunder";
+export const serious = (points) => (points || []).filter(isSerious);
 // 다시 볼 실수 3개 (가장 크게 떨어진 순)
-export const topThree = (points) => [...points].sort((a, b) => b.drop - a.drop).slice(0, 3);
+export const topThree = (points) => [...serious(points)].sort((a, b) => b.drop - a.drop).slice(0, 3);
 
 // 점검 모드: 둔 뒤 상대가 공짜로(또는 이득 보고) 잡을 수 있는 내 기물이 있나
 export function hangingAfter(fen, uci) {

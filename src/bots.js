@@ -7,6 +7,10 @@
 import { Chess } from "../vendor/chess.js";
 import { scoreOf } from "./engine.js";
 import { bookMove } from "./book.js";
+import { sample } from "./maia.js";
+
+// Maia-3는 리체스 점수로 학습됐어. 우리 구간은 체스닷컴 점수라서 저레이팅 차이(약 250~400점)만큼 올려서 넣는다.
+export const MAIA_ELO = { 400: 700, 600: 900, 800: 1050, 1000: 1250, 1200: 1450 };
 
 export const TIERS = [
   { id: 400,  stage: "baby",  depth: 4, mpv: 8, temp: 260, pRandom: 0.24,  pMissMate: 0.60, queenLove: 2.2 },
@@ -41,7 +45,8 @@ function naturalWeight(m, tier, ply) {
 const uciOf = (m) => m.from + m.to + (m.promotion || "");
 
 // 봇이 둘 수 하나를 고른다. analyse(fen, depth, multipv) → {infos:[{kind,val,pv}]}
-// opts: { history: SAN 배열, rnd: 난수 함수, forced: 강제할 SAN(오프닝 카드) }
+// opts: { history: SAN 배열, rnd: 난수 함수, forced: 강제할 SAN(오프닝 카드), maia: 불러온 Maia 인스턴스 }
+// Maia가 있으면 그 구간 사람이 실제로 둘 법한 수를 확률대로 뽑는다. 없으면 엔진 + 실수 모델.
 export async function botMove(analyse, fen, tierId, opts = {}) {
   const tier = tierOf(tierId);
   const rnd = opts.rnd || Math.random;
@@ -53,6 +58,14 @@ export async function botMove(analyse, fen, tierId, opts = {}) {
   if (opts.forced) {
     const m = legal.find((x) => x.san === opts.forced);
     if (m) return { uci: uciOf(m), san: m.san, why: "card" };
+  }
+  if (opts.maia) {
+    try {
+      const elo = MAIA_ELO[tier.id] || tier.id + 300;
+      const pol = await opts.maia.policy(fen, elo, elo);
+      const m = sample(pol, rnd, 1);
+      if (m) return { uci: m.uci, san: m.san, why: "maia" };
+    } catch (_) { /* 모델이 실패하면 아래 엔진 봇으로 */ }
   }
   if (opts.history) {
     const san = bookMove(opts.history, tier.id, rnd);

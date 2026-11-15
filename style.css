@@ -87,7 +87,7 @@ main { flex: 1; padding: 0 12px; }
 .pc.drag { position: fixed; z-index: 50; pointer-events: none; transform: scale(1.12); }
 .badge { position: absolute; right: -6%; top: -6%; width: 42%; height: 42%; border-radius: 50%; display: grid; place-items: center;
   font: 800 12px/1 sans-serif; color: #fff; z-index: 6; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); animation: pop .3s ease; }
-.badge.blunder { background: var(--bad); } .badge.mistake { background: var(--warn); }
+.badge.blunder { background: var(--bad); } .badge.mistake { background: var(--warn); } .badge.inaccuracy { background: #d6b12e; }
 .badge.good { background: var(--good); } .badge.best { background: var(--best); } .badge.habit { background: #a35bd6; }
 .promo { position: absolute; inset: 0; display: none; background: rgba(0, 0, 0, .4); z-index: 20; }
 .promo.show { display: block; }

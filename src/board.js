@@ -52,7 +52,7 @@ export class Board {
       if (this.badge && this.badge.sq === sq) {
         const b = document.createElement("div");
         b.className = "badge " + this.badge.kind;
-        b.textContent = { blunder: "??", mistake: "?", good: "✓", best: "★", habit: "!?" }[this.badge.kind] || "";
+        b.textContent = { blunder: "??", mistake: "?", inaccuracy: "?!", good: "✓", best: "★", habit: "!?" }[this.badge.kind] || "";
         d.appendChild(b);
       }
       el.appendChild(d);

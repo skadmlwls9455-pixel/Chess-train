@@ -4,9 +4,10 @@ import { Engine } from "./engine.js";
 import { Board } from "./board.js";
 import { TIERS, tierOf, botMove } from "./bots.js";
 import { CARDS, GROUPS, cardMoves, whyFor } from "./cards.js";
-import { evalPos, judgeMove, analyseGame, topThree, hangingAfter, MISTAKE, PIECE_KO } from "./review.js";
+import { evalPos, judgeMove, analyseGame, topThree, serious, hangingAfter, SOLVE, PIECE_KO } from "./review.js";
 import { faceSrc, onFaceError, line } from "./coach.js";
 import * as store from "./store.js";
+import { Maia } from "./maia.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -26,6 +27,29 @@ async function analyse(fen, depth, mpv) {
     engine = null;
     return await eng().analyse(fen, depth, mpv);
   }
+}
+
+/* ---------- Maia-3: 사람다운 봇 (불러오는 동안·실패하면 엔진 봇) ---------- */
+let maia = null, maiaState = "loading";
+(async () => {
+  try {
+    const ort = await import("../vendor/ort/ort.wasm.min.mjs");
+    ort.env.wasm.wasmPaths = new URL("../vendor/ort/", import.meta.url).href;
+    ort.env.wasm.numThreads = 1;
+    const m = new Maia(ort, "assets/maia/maia3-5m.int8.onnx");
+    await m.load();
+    await m.policy("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 900);
+    maia = m; maiaState = "ready";
+  } catch (e) {
+    console.warn("Maia 불러오기 실패, 엔진 봇으로 대신", e);
+    maiaState = "failed";
+  }
+  if (VIEW === "setup") renderMaiaState();
+})();
+const botOpts = (hist) => ({ history: hist, maia });
+function renderMaiaState() {
+  const el = $("maiaState"); if (!el) return;
+  el.textContent = { loading: "사람다운 봇(Maia-3) 불러오는 중… 그 전엔 엔진 봇이 둬.", ready: "사람다운 봇(Maia-3) 준비됨.", failed: "사람다운 봇을 못 불러와서 엔진 봇이 둬." }[maiaState];
 }
 
 /* ---------- 소리 ---------- */
@@ -88,7 +112,7 @@ function renderHome() {
     { done: d.notes > 0 || nDue === 0, t: "오답 복습", s: nDue ? `복습할 장면 ${nDue}개` : "지금 복습할 건 없어", btn: nDue ? "풀기" : null, go: () => startNotes(dueNotes()) },
     { done: d.cards >= 1, t: "오프닝 카드", s: `오늘 ${Math.min(d.cards, 3)}/3장`, btn: "카드", go: () => startCardQueue(dueCards()) },
     { done: d.game >= 1, t: "대국 한 판", s: "느리게, 두기 전에 세 가지 질문", btn: "대국", go: () => show("setup") },
-    { done: d.rewind >= 1, t: "되감기 완주", s: last && !last.rewound ? "아직 안 되감은 판이 있어" : "대국이 끝나면 바로 이어져", btn: last && !last.rewound && last.points.length ? "되감기" : null, go: () => startRewind(last) },
+    { done: d.rewind >= 1, t: "되감기 완주", s: last && !last.rewound ? "아직 안 되감은 판이 있어" : "대국이 끝나면 바로 이어져", btn: last && !last.rewound && serious(last.points).length ? "되감기" : null, go: () => startRewind(last) },
   ];
   $("today").innerHTML = items.map((x, i) => `<li class="${x.done ? "done" : ""}"><span class="ck">${x.done ? "✓" : ""}</span><span class="t">${x.t}<small>${esc(x.s)}</small></span>${x.btn ? `<button data-i="${i}">${x.btn}</button>` : ""}</li>`).join("");
   $("today").querySelectorAll("button").forEach((b) => (b.onclick = () => items[+b.dataset.i].go()));
@@ -127,6 +151,7 @@ function renderSetup() {
   seg("segColor", "color"); seg("segClock", "clock");
   $("optCheck").checked = !!st.check;
   $("optCheck").onchange = (e) => { st.check = e.target.checked; store.save(); };
+  renderMaiaState();
   coachTier = st.tier;
   say(st.tier >= 1000 ? "1000부터는 나도 진지하게 둔다." : "애기라고 봐주면 안 돼!", "playful");
 }
@@ -284,7 +309,7 @@ async function botTurn() {
   const t = P.token;
   P.busy = true;
   const started = Date.now();
-  const r = (await botMove(analyse, P.game.fen(), P.tier, { history: P.hist }).catch(() => null)) || randomMove(P.game);
+  const r = (await botMove(analyse, P.game.fen(), P.tier, botOpts(P.hist)).catch(() => null)) || randomMove(P.game);
   if (!alive(t) || P.over) return;
   // 사람처럼 잠깐 생각하는 척 (낮은 구간은 빨리 둔다)
   const think = 350 + Math.random() * (P.tier >= 1000 ? 1400 : 900);
@@ -301,6 +326,9 @@ async function botTurn() {
   else if (Math.random() < 0.18) say(["음…", "어디 보자.", "흐음."][Math.floor(Math.random() * 3)], "think");
   checkOver();
 }
+
+// 퍼즐에서 틀린 수 배지: 실수 기준에 못 미쳐도 정답이 아니면 최소 "?!"
+const badKind = (k) => (k === "blunder" || k === "mistake" || k === "inaccuracy" ? k : "inaccuracy");
 
 function randomMove(g) {
   const ms = g.moves({ verbose: true });
@@ -352,16 +380,17 @@ async function runAnalysis(g) {
   g.points = pts;
   store.save();
   // 실수 장면은 모두 오답노트로
-  store.addNotes(pts.map((p) => ({
+  store.addNotes(serious(pts).map((p) => ({
     id: g.id + ":" + p.ply, gameId: g.id, fen: p.fen, played: p.played, playedUci: p.playedUci, best: p.best,
     tags: p.tags, kind: p.kind, tier: g.tier, box: 0, due: Date.now(), habit: 0,
   })));
   if (!alive(t)) return;
   const top = topThree(pts);
-  const list = top.length ? `<p>오늘 판의 실수 ${pts.length}개. 제일 컸던 것:<br>${top.map((p) => `${Math.floor(p.ply / 2) + 1}수 ${esc(p.played)} · ${p.tags.join(", ")}`).join("<br>")}</p>` : "<p>큰 실수 없이 뒀어. 대단한데?</p>";
+  const nInacc = pts.length - serious(pts).length;
+  const list = top.length ? `<p>실수 ${serious(pts).length}개${nInacc ? ` · 부정확 ${nInacc}개` : ""}. 제일 컸던 것:<br>${top.map((p) => `${Math.floor(p.ply / 2) + 1}수 ${esc(p.played)} · ${p.tags.join(", ")}`).join("<br>")}</p>` : "<p>큰 실수 없이 뒀어. 대단한데?</p>";
   const btns = [];
-  if (pts.length) btns.push({ label: "되감기 시작", primary: true, fn: () => startRewind(g) });
-  btns.push({ label: "한 판 더", primary: !pts.length, fn: () => startGame({ tier: g.tier, me: g.me, clock: S().settings.clock, check: S().settings.check }) });
+  if (top.length) btns.push({ label: "되감기 시작", primary: true, fn: () => startRewind(g) });
+  btns.push({ label: "한 판 더", primary: !top.length, fn: () => startGame({ tier: g.tier, me: g.me, clock: S().settings.clock, check: S().settings.check }) });
   btns.push({ label: "도장으로", fn: () => show("home") });
   const head = $("overlay").querySelector("h3").outerHTML + $("overlay").querySelector("p").outerHTML;
   overlay(head + list, btns);
@@ -371,8 +400,8 @@ async function runAnalysis(g) {
    되감기: 실수 지점부터 다시 두고, 끝까지 이어서 둔다
    ========================================================= */
 function startRewind(g) {
-  if (!g || !g.points || !g.points.length) return;
-  const p0 = g.points[0];
+  const p0 = g && serious(g.points)[0];
+  if (!p0) return;
   openPlay({ mode: "rewind", tier: g.tier, me: g.me, src: g, hist: g.sans.slice(0, p0.ply), fixed: 0, stops: 0 });
   P.game = new Chess();
   for (const s of P.hist) P.game.move(s);
@@ -426,10 +455,10 @@ async function userRewindMove(uci) {
   if (P.phase === "find") {
     const habit = P.target.playedUci && uci.slice(0, 4) === P.target.playedUci.slice(0, 4);
     const revealed = P.tries >= 3;
-    const ok = revealed ? uci.slice(0, 4) === (before.best || "").slice(0, 4) || j.drop < MISTAKE / 2 : j.drop < MISTAKE && !habit;
+    const ok = revealed ? uci.slice(0, 4) === (before.best || "").slice(0, 4) || j.drop < SOLVE / 2 : j.drop < SOLVE && !habit;
     if (!ok) {
       P.tries++;
-      board.badge = { sq: uci.slice(2, 4), kind: habit ? "habit" : j.kind === "blunder" ? "blunder" : "mistake" };
+      board.badge = { sq: uci.slice(2, 4), kind: habit ? "habit" : badKind(j.kind) };
       board.draw();
       if (habit) { sayKey("habit", "playful"); markHabit(P.target.noteId); } else sayKey("wrong", "think");
       await sleep(1000);
@@ -479,7 +508,7 @@ async function rewindBot() {
   const t = P.token;
   P.busy = true;
   board.badge = null;
-  const r = (await botMove(analyse, P.game.fen(), P.tier, { history: P.hist }).catch(() => null)) || randomMove(P.game);
+  const r = (await botMove(analyse, P.game.fen(), P.tier, botOpts(P.hist)).catch(() => null)) || randomMove(P.game);
   if (!alive(t)) return;
   await sleep(350);
   if (!alive(t)) return;
@@ -575,7 +604,7 @@ async function userNoteMove(uci) {
   if (!alive(t)) return;
   const habit = uci.slice(0, 4) === (n.playedUci || "").slice(0, 4);
   const best = uci.slice(0, 4) === (P.before.best || "").slice(0, 4);
-  if (j.drop < MISTAKE && !habit) {
+  if (j.drop < SOLVE && !habit) {
     board.badge = { sq: uci.slice(2, 4), kind: best ? "best" : "good" }; board.draw();
     const clean = P.tries === 0;
     store.schedule(n, clean);
@@ -587,7 +616,7 @@ async function userNoteMove(uci) {
     return;
   }
   P.tries++;
-  board.badge = { sq: uci.slice(2, 4), kind: habit ? "habit" : j.kind === "blunder" ? "blunder" : "mistake" };
+  board.badge = { sq: uci.slice(2, 4), kind: habit ? "habit" : badKind(j.kind) };
   board.draw();
   if (habit) { n.habit = (n.habit || 0) + 1; store.save(); sayKey("habit", "playful"); } else sayKey("wrong", "think");
   await sleep(1000);
@@ -720,17 +749,22 @@ function renderLog() {
   coachTier = maxTier();
   const games = S().games.slice().reverse();
   const counts = {};
-  for (const g of S().games) for (const p of g.points || []) for (const tg of p.tags) counts[tg] = (counts[tg] || 0) + 1;
+  let inacc = 0;
+  for (const g of S().games) for (const p of g.points || []) {
+    if (p.kind === "inaccuracy") { inacc++; continue; }
+    for (const tg of p.tags) counts[tg] = (counts[tg] || 0) + 1;
+  }
   const habits = S().notes.filter((n) => n.habit).length;
   if (habits) counts["손버릇"] = habits;
   const ent = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (inacc) ent.push(["부정확(기록만)", inacc]);
   const max = Math.max(1, ...ent.map((e) => e[1]));
   $("tagBars").innerHTML = ent.length ? ent.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><span class="b"><i style="width:${(100 * v) / max}%"></i></span><span>${v}</span></div>`).join("") : `<div class="empty">판을 두면 실수 유형이 쌓여.</div>`;
   $("gameList").innerHTML = games.length ? games.slice(0, 30).map((g) => {
     const top = g.points ? topThree(g.points) : [];
     const r = { win: "승", loss: "패", draw: "무" }[g.result];
     const d = new Date(g.date);
-    return `<div class="game"><span class="res ${g.result}">${r}</span><span class="t">에이든 ${g.tier} · ${g.me === "w" ? "백" : "흑"} · ${Math.ceil(g.sans.length / 2)}수<small>${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}${g.rewound ? " · 되감기 완주" : ""}</small>${top.length ? `<div class="mist">${top.map((p) => `${Math.floor(p.ply / 2) + 1}수 ${esc(p.played)} (${p.tags.join(", ")})`).join(" / ")}</div>` : ""}</span>${g.points && g.points.length ? `<button data-id="${g.id}">되감기</button>` : ""}</div>`;
+    return `<div class="game"><span class="res ${g.result}">${r}</span><span class="t">에이든 ${g.tier} · ${g.me === "w" ? "백" : "흑"} · ${Math.ceil(g.sans.length / 2)}수<small>${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}${g.rewound ? " · 되감기 완주" : ""}</small>${top.length ? `<div class="mist">${top.map((p) => `${Math.floor(p.ply / 2) + 1}수 ${esc(p.played)} (${p.tags.join(", ")})`).join(" / ")}</div>` : ""}</span>${serious(g.points).length ? `<button data-id="${g.id}">되감기</button>` : ""}</div>`;
   }).join("") : `<div class="empty">아직 둔 판이 없어.</div>`;
   $("gameList").querySelectorAll("button").forEach((b) => (b.onclick = () => startRewind(S().games.find((g) => g.id === b.dataset.id))));
   const top = ent[0];
@@ -761,4 +795,4 @@ window.addEventListener("beforeunload", (e) => {
 show("home");
 
 // 테스트용: 지금 판 상태 엿보기
-window.__ct = { P: () => P };
+window.__ct = { P: () => P, maia: () => maiaState };
