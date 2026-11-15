@@ -60,6 +60,7 @@
     <section id="v-cards" class="view">
       <button class="primary big" id="dueCards"></button>
       <div id="cardGroups"></div>
+      <div class="backup"><button class="textbtn" id="tutBtn"></button></div>
     </section>
 
     <!-- 오답노트 -->
@@ -74,6 +75,12 @@
       <div class="stats" id="stats"></div>
       <div class="bars" id="tagBars"></div>
       <div class="list" id="gameList"></div>
+      <div class="syncrow">
+        <span class="lbl" id="syncLbl"></span>
+        <span class="chip" id="syncState"></span>
+        <button id="syncBtn"></button>
+        <button class="iconbtn" id="syncOff" aria-label="동기화 끊기"></button>
+      </div>
       <div class="backup">
         <button class="textbtn" id="exportBtn"></button>
         <label class="textbtn"><input type="file" id="importFile" accept="application/json" hidden><span id="importLbl"></span></label>

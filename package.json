@@ -1,0 +1,7 @@
+{
+  "name": "chess-train",
+  "private": true,
+  "type": "module",
+  "description": "폐관 수련 도장 (정적 사이트 + api/sync 서버리스 함수 하나)",
+  "license": "AGPL-3.0-or-later"
+}

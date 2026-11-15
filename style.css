@@ -191,3 +191,14 @@ body.playing .sticky { bottom: 0; }
 html { word-break: keep-all; overflow-wrap: anywhere; }
 .kimg { display: block; flex: none; }
 label.textbtn span { display: inline-flex; align-items: center; gap: 6px; }
+.legend { display: grid; gap: 12px; text-align: left; margin: 14px 4px 10px; font-size: 15px; }
+.legend > div { display: flex; align-items: center; gap: 12px; }
+.legend .ico { width: 64px; flex: none; display: flex; justify-content: center; }
+.legend .lv { display: flex; gap: 3px; width: 64px; }
+.legend .lv i { flex: 1; height: 4px; border-radius: 2px; background: var(--surface2); }
+.legend .lv i.on { background: var(--accent); }
+.legend .mark { position: static; }
+.syncrow { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: var(--r2); padding: 4px 4px 4px 14px; margin-top: 20px; }
+.syncrow .lbl { flex: 1; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.syncrow button { background: var(--surface2); min-height: 40px; font-size: 14px; font-weight: 600; }
+.chip.err { background: var(--bad); color: #fff; }

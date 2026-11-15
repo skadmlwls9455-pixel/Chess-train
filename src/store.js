@@ -21,7 +21,19 @@ try {
 } catch (_) {}
 
 export const state = () => S;
-export function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {} }
+let onSave = null;
+export function setOnSave(fn) { onSave = fn; }
+// quiet: 동기화로 받아온 기록을 쓸 때는 다시 올리지 않는다
+export function save(quiet) {
+  if (!quiet) S.updatedAt = Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {}
+  if (!quiet && onSave) onSave();
+}
+// 다른 기기 기록으로 통째로 바꾸기
+export function replace(data) {
+  S = Object.assign(fresh(), data, { settings: Object.assign(fresh().settings, data.settings || {}) });
+  save(true);
+}
 export const now = () => Date.now();
 export const today = () => new Date().toLocaleDateString("sv-SE");
 export function daily() { const d = today(); return (S.daily[d] ||= { game: 0, rewind: 0, notes: 0, cards: 0 }); }

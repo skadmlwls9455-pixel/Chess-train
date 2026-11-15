@@ -29,6 +29,18 @@ python3 -m http.server 8000
 
 Vercel / GitHub Pages / Netlify에 폴더째 올려도 돼. 휴대폰 크롬에서 열고 메뉴 → **앱 설치**(또는 홈 화면에 추가)를 누르면 주소창 없이 앱처럼 열려. 아이폰은 사파리 공유 → 홈 화면에 추가. 기록은 그 기기 브라우저(localStorage)에만 저장되고, 일지 탭에서 백업 파일로 옮길 수 있어.
 
+## 기록 동기화 (비밀 코드)
+
+기록은 기본적으로 그 기기 브라우저에만 저장돼. 일지 탭 **동기화 → 연결**에서 코드를 만들면 기록이 서버에도 저장되고, 다른 기기에서 같은 코드를 넣으면 이어서 쓸 수 있어. 나중에 저장한 쪽이 이겨.
+
+- 서버: `api/sync.js` (Vercel 서버리스 함수) + Upstash Redis(예전 Vercel KV). 코드는 저장하지 않고 SHA-256 해시만 키로 써.
+- 코드를 아는 사람은 기록을 볼 수 있으니 공유하지 마.
+
+Vercel 설정 (한 번만):
+1. Vercel 프로젝트 → **Storage** → **Create Database** → **Upstash for Redis** (무료 플랜) → 이 프로젝트에 연결
+2. 연결하면 환경 변수 `KV_REST_API_URL`, `KV_REST_API_TOKEN`이 자동으로 들어가. 그다음 **Redeploy**
+3. 설정 전에는 동기화 버튼을 눌러도 "서버에 연결하지 못했어"가 나와 (앱의 나머지 기능은 그대로 돼)
+
 ## 애기 에이든 그림
 
 `img/baby/`의 표정 6장(think, surprise, smile, playful, frust, joy)이 400~800 구간에서 쓰여. 원본에서 얼굴 쪽을 256px 정사각형으로 잘라 webp로 넣었어. 파일이 없으면 원래 에이든 얼굴로 대신해.
@@ -54,6 +66,8 @@ src/review.js    판 분석, 실수 판정, 점검 모드
 src/coach.js     에이든 대사와 표정
 src/board.js     보드 UI
 src/store.js     저장, 간격 반복, 구간 진행
+src/sync.js      비밀 코드 동기화 (api/sync.js 호출)
+api/sync.js      동기화 서버리스 함수 (Upstash Redis)
 src/engine.js    Stockfish 워커 래퍼
 vendor/          chess.js, Stockfish WASM, onnxruntime-web
 assets/maia/     Maia-3 5M int8 ONNX 모델

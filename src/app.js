@@ -9,6 +9,7 @@ import { faceSrc, onFaceError, line } from "./coach.js";
 import * as store from "./store.js";
 import { Maia } from "./maia.js";
 import { icon } from "./icons.js";
+import * as sync from "./sync.js";
 import { PIECE } from "./pieces.js";
 const kingImg = (c, size = 22) => `<img class="kimg" src="${PIECE[c + "k"]}" width="${size}" height="${size}" alt="">`;
 
@@ -653,6 +654,7 @@ async function userNoteMove(uci) {
    ========================================================= */
 let cardQueue = [];
 function startCardQueue(list) {
+  if (needTutorial()) return startTutorial(() => startCardQueue(list));
   cardQueue = list.slice();
   if (!cardQueue.length) { show("cards"); return; }
   nextCard();
@@ -663,6 +665,7 @@ function nextCard() {
   startCard(c);
 }
 function startCard(card) {
+  if (needTutorial()) return startTutorial(() => startCard(card));
   openPlay({ mode: "card", tier: maxTier(), me: card.me, card, step: 0, wrong: 0, stepWrong: 0, oppName: card.title });
   status(card.trap ? `<span class="chip trap">${icon("bolt", 14)} 함정</span>` : "");
   say(card.goal, "smile");
@@ -681,7 +684,12 @@ async function cardAdvance() {
   }
   if (!alive(t)) return;
   P.busy = false;
-  if (P.step >= ms.length) return cardDone();
+  if (P.step >= ms.length) return P.tutorial ? tutorialDone() : cardDone();
+  if (P.tutorial) {
+    const e = new Chess(P.game.fen()).move(ms[P.step]);
+    board.hint = [e.from, e.to];
+    say(whyFor(P.card, P.step), "smile");
+  }
   board.draw();
 }
 async function userCardMove(uci) {
@@ -694,7 +702,7 @@ async function userCardMove(uci) {
   if (uci.slice(0, 4) === okUci) {
     board.badge = { sq: m.to, kind: "good" }; board.hint = [];
     const w = whyFor(P.card, P.step);
-    if (w) say(w, "smile");
+    if (w && !P.tutorial) say(w, "smile");
     P.step++; P.stepWrong = 0;
     board.draw();
     await sleep(500);
@@ -704,13 +712,13 @@ async function userCardMove(uci) {
   }
   P.wrong++; P.stepWrong++;
   board.badge = { sq: m.to, kind: "mistake" }; board.draw();
-  say(line("cardWrong", P.tier, { w: whyFor(P.card, P.step) || "카드 수순이랑 달라." }), "think");
+  say(P.tutorial ? "표시한 칸으로 둬 봐." : line("cardWrong", P.tier, { w: whyFor(P.card, P.step) || "카드 수순이랑 달라." }), "think");
   await sleep(1100);
   if (!alive(t)) return;
   P.game.undo(); board.badge = null;
   const prev = P.game.history({ verbose: true }).slice(-1)[0];
   board.last = prev ? prev.from + prev.to : null;
-  if (P.stepWrong >= 2) board.hint = [expect.from, expect.to];
+  if (P.stepWrong >= 2 || P.tutorial) board.hint = [expect.from, expect.to];
   P.busy = false;
   board.draw();
 }
@@ -729,6 +737,62 @@ function cardDone() {
   ]);
 }
 
+/* ---------- 오프닝 튜토리얼 (처음 한 번) ---------- */
+const TUTORIAL_CARD = {
+  id: "tutorial", group: "w", me: "w", title: "튜토리얼",
+  moves: "e4 e5 Nf3 Nc6 Bc4 Bc5 O-O",
+  why: {
+    0: "먼저 가운데 폰. e4로 중앙을 잡아.",
+    2: "다음은 나이트. Nf3는 전개하면서 e5 폰도 공격해.",
+    4: "비숍도 꺼내. Bc4는 흑의 약한 칸 f7을 노려.",
+    6: "마지막으로 캐슬링. 킹을 g1에 놓으면 룩이 같이 움직여.",
+  },
+};
+const TUTORIAL_INTRO = [
+  { t: "오프닝은 처음 10수 정도야. 세 가지만 지키면 돼.", hint: [] },
+  { t: "하나. 가운데 폰으로 중앙을 잡아.", hint: ["e4", "d4", "e5", "d5"] },
+  { t: "둘. 나이트와 비숍을 먼저 꺼내. 퀸은 나중에.", hint: ["b1", "g1", "c1", "f1"] },
+  { t: "셋. 캐슬링으로 킹을 일찍 안전한 곳에 둬.", hint: ["e1", "g1"] },
+  { t: "카드에서는 내가 상대 수를 두고, 너는 네 수를 둬. 이번엔 정답 칸을 표시해 줄게.", hint: [] },
+];
+const needTutorial = () => !(S().tutorial && S().tutorial.cards);
+let tutorialNext = null;
+function startTutorial(then) {
+  tutorialNext = then;
+  openPlay({ mode: "card", tutorial: true, tier: maxTier(), me: "w", card: TUTORIAL_CARD, step: 0, wrong: 0, stepWrong: 0, oppName: "오프닝 튜토리얼", intro: 0 });
+  P.busy = true;
+  tutorialSlide();
+}
+function tutorialSlide() {
+  const i = P.intro, sl = TUTORIAL_INTRO[i];
+  board.hint = sl.hint; board.draw();
+  say(sl.t, i === 0 ? "smile" : "think");
+  status(`<span class="chip">${i + 1}/${TUTORIAL_INTRO.length}</span>`);
+  actions([
+    { icon: "chevron", label: i < TUTORIAL_INTRO.length - 1 ? "다음" : "두기", fn: () => {
+      if (++P.intro < TUTORIAL_INTRO.length) return tutorialSlide();
+      status(""); board.hint = []; actions([{ icon: "close", label: "건너뛰기", fn: finishTutorial }]);
+      cardAdvance();
+    } },
+    { icon: "skip", label: "건너뛰기", fn: finishTutorial },
+  ]);
+}
+function tutorialDone() {
+  P.over = true; board.hint = [];
+  say("이제 카드 표시만 알면 돼.", "joy");
+  overlay(`<h3>튜토리얼 끝</h3><div class="legend">
+      <div><span class="ico"><span class="lv"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></span>맞힐수록 바가 차</div>
+      <div><span class="ico"><span class="mark due"></span></span>다시 풀 때가 된 카드</div>
+      <div><span class="ico"><span class="mark trap">${icon("bolt", 16)}</span></span>상대 실수를 노리는 함정</div>
+    </div>`, [{ label: "카드 시작", primary: true, fn: finishTutorial }]);
+}
+function finishTutorial() {
+  S().tutorial = Object.assign(S().tutorial || {}, { cards: true });
+  store.save();
+  const then = tutorialNext; tutorialNext = null;
+  if (then) then(); else show("cards");
+}
+
 const GROUP_SHORT = { w: "백 · 이탈리안", be4: "흑 · 1.e4", bd4: "흑 · 1.d4" };
 function renderCards() {
   coachTier = maxTier();
@@ -737,6 +801,8 @@ function renderCards() {
   $("dueCards").innerHTML = `${icon("cards", 22)} 오늘의 카드${due ? ` ${due}` : ""}`;
   $("dueCards").disabled = !due;
   $("dueCards").onclick = () => startCardQueue(dueCards());
+  $("tutBtn").innerHTML = `${icon("info", 16)} 튜토리얼`;
+  $("tutBtn").onclick = () => startTutorial(() => show("cards"));
   $("cardGroups").innerHTML = GROUPS.map((gr) => `<h2>${GROUP_SHORT[gr.id] || gr.title}</h2><div class="cardgrid">${CARDS.filter((c) => c.group === gr.id).map((c) => {
     const st = store.cardState(c.id);
     const due = st.seen && store.isDue(st);
@@ -797,6 +863,7 @@ function renderLog() {
     return `<button class="row ${n ? "" : "static"}" data-id="${g.id}"><span class="res ${g.result}">${r}</span><img src="${faceSrc(t.stage, "smile")}" onerror="this.onerror=null;this.src='img/aiden/smile.webp'" alt=""><b>${g.tier}</b>${kingImg(g.me, 20)}${g.rewound ? `<span class="chip ok">${icon("check", 12)}</span>` : ""}<span class="sp"></span>${n ? `<span class="kind blunder">${n}</span>${icon("rewind", 18)}` : ""}</button>`;
   }).join("") : `<div class="empty">${icon("log", 32)}<span>아직 둔 판 없음</span></div>`;
   $("gameList").querySelectorAll(".row:not(.static)").forEach((b) => (b.onclick = () => startRewind(S().games.find((g) => g.id === b.dataset.id))));
+  renderSync();
   $("exportBtn").innerHTML = `${icon("download", 16)} 백업`;
   $("importLbl").innerHTML = `${icon("upload", 16)} 불러오기`;
   const top = ent[0];
@@ -823,6 +890,44 @@ window.addEventListener("beforeunload", (e) => {
   if (P && P.mode === "game" && !P.over && P.hist.length) { e.preventDefault(); e.returnValue = ""; }
 });
 
+/* ---------- 동기화 (비밀 코드) ---------- */
+const SYNC_TXT = { off: "", idle: "", saving: "저장 중", ok: "저장됨", error: "오류" };
+function renderSync() {
+  const on = !!sync.getCode();
+  $("syncLbl").innerHTML = `${icon("upload", 18)} 동기화`;
+  $("syncState").textContent = SYNC_TXT[sync.status] || "";
+  $("syncState").className = "chip" + (sync.status === "ok" ? " ok" : sync.status === "error" ? " err" : "");
+  $("syncState").style.display = SYNC_TXT[sync.status] ? "" : "none";
+  $("syncBtn").textContent = on ? "코드" : "연결";
+  $("syncBtn").onclick = on ? showSyncCode : connectSync;
+  $("syncOff").style.display = on ? "" : "none";
+  $("syncOff").innerHTML = icon("close", 18);
+  $("syncOff").onclick = disconnectSync;
+}
+sync.onStatus(() => { if (VIEW === "log") renderSync(); });
+async function connectSync() {
+  const typed = prompt("다른 기기에서 쓰던 코드를 넣어. 처음이면 비워 두고 확인을 누르면 새 코드를 만들어.");
+  if (typed === null) return;
+  const code = typed.trim() || sync.newCode();
+  if (code.length < 8) { say("코드는 8자 이상이어야 해.", "think"); return; }
+  const changed = await sync.connect(code);
+  if (sync.status === "error") { say("서버에 연결하지 못했어. 코드나 인터넷을 확인해 줘.", "think"); renderSync(); return; }
+  renderLog();
+  if (!typed.trim()) {
+    try { await navigator.clipboard.writeText(code); } catch (_) {}
+    say(`새 코드: ${code} (복사해 뒀어). 다른 기기에서 이 코드를 넣으면 이어져.`, "smile");
+  } else say(changed ? "다른 기기 기록을 불러왔어." : "연결했어. 이제 기록이 자동으로 저장돼.", "smile");
+}
+function showSyncCode() {
+  const code = sync.getCode();
+  try { navigator.clipboard.writeText(code); } catch (_) {}
+  say(`코드: ${code} (복사해 뒀어). 이 코드를 아는 사람은 기록을 볼 수 있으니 공유하지 마.`, "smile");
+}
+function disconnectSync() {
+  if (!confirm("이 기기에서 동기화를 끊을까? 기록은 이 기기와 서버에 그대로 남아.")) return;
+  sync.disconnect(); renderSync(); say("동기화를 끊었어.", "smile");
+}
+
 /* ---------- 앱 설치(홈 화면) + 저장소 보존 요청 ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 // 브라우저가 공간이 부족할 때 기록을 지우지 않도록 요청 (설치된 앱이면 대개 허용됨)
@@ -830,6 +935,8 @@ if (navigator.storage && navigator.storage.persist) navigator.storage.persist().
 
 /* ---------- 시작 ---------- */
 show("home");
+// 다른 기기에서 저장한 기록이 더 새로우면 받아와서 화면을 다시 그린다
+sync.pull().then((changed) => { if (changed && VIEW !== "play") show(VIEW); });
 
 // 테스트용: 지금 판 상태 엿보기
 window.__ct = { P: () => P, maia: () => maiaState };
