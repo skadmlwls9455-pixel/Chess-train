@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>폐관 수련 도장</title>
+<meta name="theme-color" content="#262421">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 에이든: 판 위에 작게 떠 있는 코치 -->
+  <div class="coach" id="coach">
+    <div class="avatar"><img id="face" alt="에이든"></div>
+    <div class="bubble" id="bubble"><span id="say"></span></div>
+  </div>
+
+  <main>
+    <!-- 도장 -->
+    <section id="v-home" class="view">
+      <h2>오늘의 수련</h2>
+      <ol class="today" id="today"></ol>
+      <h2>구간</h2>
+      <div class="ladder" id="ladder"></div>
+      <details class="rules">
+        <summary>도장 규칙</summary>
+        <ul>
+          <li>두기 전에 세 가지: 상대가 뭘 노리지? 내 계획은? 이 수 다음 상대는?</li>
+          <li>퀸은 나이트·비숍이 나온 다음에. 캐슬링은 일찍.</li>
+          <li>진 판은 되감기로 끝까지 다시 둔다.</li>
+          <li>2연패면 판 대신 카드와 오답부터.</li>
+        </ul>
+      </details>
+    </section>
+
+    <!-- 대국 설정 -->
+    <section id="v-setup" class="view">
+      <h2>상대</h2>
+      <div class="tiers" id="setupTiers"></div>
+      <h2>내 색</h2>
+      <div class="seg" id="segColor">
+        <button data-v="w">백</button><button data-v="b">흑</button><button data-v="r">랜덤</button>
+      </div>
+      <h2>시간</h2>
+      <div class="seg" id="segClock">
+        <button data-v="none">없음</button><button data-v="10+5">10+5</button><button data-v="15+10">15+10</button>
+      </div>
+      <label class="toggle"><input type="checkbox" id="optCheck"> 점검 모드 (기물이 걸리는 수를 두면 한 번 물어봐)</label>
+      <button class="primary big" id="startGame">시작</button>
+    </section>
+
+    <!-- 판: 대국, 되감기, 카드, 오답이 모두 여기서 -->
+    <section id="v-play" class="view">
+      <div class="strip top"><span id="oppName"></span><span class="clock" id="oppClock"></span></div>
+      <div class="boardwrap">
+        <div class="board" id="board"></div>
+        <div class="promo"></div>
+        <div class="overlay" id="overlay"></div>
+      </div>
+      <div class="strip bottom"><span id="myName">나</span><span class="clock" id="myClock"></span></div>
+      <div class="status" id="status"></div>
+      <div class="actions" id="actions"></div>
+    </section>
+
+    <!-- 오프닝 카드 -->
+    <section id="v-cards" class="view">
+      <button class="primary big" id="dueCards">오늘의 카드</button>
+      <div id="cardGroups"></div>
+    </section>
+
+    <!-- 오답노트 -->
+    <section id="v-notes" class="view">
+      <button class="primary big" id="dueNotes">복습 시작</button>
+      <div class="filters" id="noteFilters"></div>
+      <div class="notelist" id="noteList"></div>
+    </section>
+
+    <!-- 일지 -->
+    <section id="v-log" class="view">
+      <h2>실수 유형</h2>
+      <div class="bars" id="tagBars"></div>
+      <h2>최근 판</h2>
+      <div class="games" id="gameList"></div>
+      <details class="rules">
+        <summary>데이터</summary>
+        <p class="muted">기록은 이 기기 브라우저에만 저장돼.</p>
+        <button id="exportBtn">백업 파일 받기</button>
+        <label class="filebtn">백업 불러오기<input type="file" id="importFile" accept="application/json"></label>
+      </details>
+    </section>
+  </main>
+
+  <nav class="tabs" id="tabs">
+    <button data-v="home"><b>道</b><span>도장</span></button>
+    <button data-v="setup"><b>♟</b><span>대국</span></button>
+    <button data-v="cards"><b>❖</b><span>오프닝</span></button>
+    <button data-v="notes"><b>✎</b><span>오답</span></button>
+    <button data-v="log"><b>☰</b><span>일지</span></button>
+  </nav>
+</div>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
