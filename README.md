@@ -67,4 +67,4 @@ img/             에이든 그림 (코드와 다른 라이선스, 아래 참고)
 
 에이든 그림(`img/`): © 2026 Kate Nahm. All rights reserved. GPL 적용 대상이 아니고, 허락 없이 복제, 수정, 배포, 상업적 이용을 할 수 없어.
 
-서드파티: [Pretendard](https://github.com/orioncactus/pretendard) Light (OFL-1.1, `assets/fonts/`), [Maia-3](https://github.com/CSSLab/maia3) 코드·5M 가중치 (AGPL-3.0, `assets/maia/`), [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT), [Stockfish](https://stockfishchess.org/) / [Stockfish.js](https://github.com/nmrugg/stockfish.js) (GPLv3), [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause), cburnett 기물 by Colin M.L. Burnett (CC BY-SA 3.0).
+서드파티: [Pretendard](https://github.com/orioncactus/pretendard) Regular·Medium·SemiBold (OFL-1.1, `assets/fonts/`), [Maia-3](https://github.com/CSSLab/maia3) 코드·5M 가중치 (AGPL-3.0, `assets/maia/`), [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT), [Stockfish](https://stockfishchess.org/) / [Stockfish.js](https://github.com/nmrugg/stockfish.js) (GPLv3), [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause), cburnett 기물 by Colin M.L. Burnett (CC BY-SA 3.0).

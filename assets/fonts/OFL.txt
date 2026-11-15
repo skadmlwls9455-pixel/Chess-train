@@ -2,4 +2,4 @@ Pretendard — Copyright © 2023 Kil Hyung-jin
 https://github.com/orioncactus/pretendard
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 http://scripts.sil.org/OFL
-(Pretendard-Light.otf 를 woff2로 변환해서 넣음)
+(Regular, Medium, SemiBold OTF를 woff2로 변환해서 넣음. 본문 Medium, 굵은 글씨 SemiBold)

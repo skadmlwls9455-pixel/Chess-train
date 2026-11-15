@@ -1,8 +1,6 @@
-@font-face {
-  font-family: "Pretendard";
-  src: url("assets/fonts/Pretendard-Light.woff2") format("woff2");
-  font-weight: 300; font-style: normal; font-display: swap;
-}
+@font-face { font-family: "Pretendard"; src: url("assets/fonts/Pretendard-Regular.woff2") format("woff2"); font-weight: 100 400; font-display: swap; }
+@font-face { font-family: "Pretendard"; src: url("assets/fonts/Pretendard-Medium.woff2") format("woff2"); font-weight: 401 550; font-display: swap; }
+@font-face { font-family: "Pretendard"; src: url("assets/fonts/Pretendard-SemiBold.woff2") format("woff2"); font-weight: 551 900; font-display: swap; }
 /* 색·간격 기준: Chess.com 다크 테마 톤 (따뜻한 차콜 + 초록 강조 1곳) */
 :root {
   --bg: #2b2926; --surface: #3a3734; --surface2: #4a4744; --line: #45423e;
@@ -16,7 +14,7 @@
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
-  font: 300 16px/1.4 "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif; }
+  font: 500 16px/1.4 "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif; }
 button { font: inherit; color: inherit; background: var(--surface); border: 0; border-radius: var(--r2); padding: 10px 14px; cursor: pointer; min-height: 48px; }
 button:active { filter: brightness(1.12); }
 button:disabled { opacity: .4; cursor: default; }
